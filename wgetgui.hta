@@ -1,0 +1,341 @@
+<html>
+
+<head>
+<title>WGETGUI by Marc Cawood</title>
+<style>
+body, td {font-family:verdana;}
+td {font-size:10pt;}
+.bg {background:navy; font-weight:bold; color:white;}
+.smear {filter:alpha(finishopacity=0, style=1)}
+.bg a, .bg a:visited {text-decoration:none; color:white;}
+.border {border:1px solid navy;}
+.small {font-size:8pt;}
+table.small td {font-size:8pt;}
+span.lll {font-weight:bold; cursor:hand;}
+div.help {font-size:8pt; color:blue; border-bottom:1px solid red;}
+.silver {color:silver;}
+</style>
+<script language=vbscript>
+Dim fso, wShell, path
+Set fso    = CreateObject("Scripting.FileSystemObject")
+Set wShell = CreateObject("WScript.Shell")
+
+Dim Command, CommandFocussed
+
+Function ToggleContents(id, rowno)
+   Dim el
+   Set el = document.all("tab_" & id).rows(rowno)
+   If el.style.display="none" Then
+      el.style.display=""
+   else
+      el.style.display="none"
+   End If
+End Function
+
+Function IsMissing(name, msg)
+   If Request(name)="" Then
+      MsgBox msg
+      Focus(name)
+      IsMissing = True
+   Else
+      IsMissing = False
+   End If
+End Function
+
+Function Request(name)
+   Request = document.forms.main(name).value
+End Function
+
+Function RequestChecked(name)
+   If document.forms.main(name).checked Then RequestChecked = Request(name)
+End Function
+
+Function RequestSelected(name)
+   RequestSelected = document.forms.main(name).options(document.forms.main(name).selectedIndex).value
+End Function
+
+Function Focus(name)
+   document.forms.main(name).focus()
+End Function
+
+Function MakeCommand()
+   Command = ""
+   If IsMissing("url", "Please enter a URL to download.") Then Exit Function
+
+   
+   If RequestSelected("followlinks")<>"" Then
+      Call Append(RequestSelected("followlinks"))
+'      Call AppendIfSet("depth", " -l")
+      Call AppendIfChecked("foreign")
+   End If
+   Call AppendIfChecked("noparent")
+   Call AppendIfSet("domains", " -D")
+   Call AppendIfSet("retries", " -t")
+   Call AppendIfSet("useragent", " -U")
+   Call AppendIfSet("folders", " -I")
+   Call AppendIfSet("nofolders", " -X")
+   Call AppendIfSet("extensions", " -A")
+   Call AppendIfSet("noextensions", " -R")
+   Call AppendIfSet("filelimit", " -Q")
+   Call AppendIfSet("wait", " -W")
+   Call AppendIfChecked("relative")
+   
+   Call AppendIfSet("username", " --http-user=")
+   Call AppendIfSet("password", " --http-passwd=")
+   Command = "wget.exe " & Command & " -o op.txt " & Request("url")
+   MakeCommand = Command
+End Function
+
+Function UpdateCommand()
+   If Not CommandFocussed Then
+      document.forms.main.command.value = MakeCommand
+   End If
+End Function
+
+Function RunCommand()
+   Dim result
+   
+   UpdateCommand
+   
+   On Error Resume Next
+   
+   DeleteFile("op.txt")
+
+   ' Start WGET
+   result = wShell.Run(Command, 1, True)
+   
+   ' WGET is complete
+   Call LoadFromFileTOP("op.txt", result, 10)
+   If Err=0 Then
+      MsgBox "COMPLETED" & vbNewLine & "------------------------" & vbNewLine & result
+      If Request("username")="" And InStr(result, "401 Access Denied") Then MsgBox "The web server requested authentication. Please enter a username and password under the ""Logon Details"" window."
+   Else
+      MsgBox "An error has occurred, please check the following:" & vbNewLine & " - The wget.exe is in the same folder as this application." & vbNewLine & " - Check that the server does not require a username and password." & vbNewLine & " - Try running the command from the DOS prompt to see the error message."
+      if result<>"" Then MsgBox result
+   End If
+   Call LoadFromFileTOP("op.txt", result, 200)
+   document.all("tab_output").rows(2).style.display=""
+   Focus("op")
+   document.forms.main.op.value=result
+   On Error Goto 0
+End Function
+
+Function Append(switch)
+   Command = Command & switch
+End Function
+
+Function AppendIfChecked(name)
+   If RequestChecked(name)<>"" Then Command = Command & " " & RequestChecked(name)
+   AppendIfChecked = (RequestChecked(name)<>"")
+End Function
+
+Function AppendIfSet(name, switch)
+   If Request(name)<>"" Then Command = Command & switch & Request(name)
+   AppendIfSet = (Request(name)<>"")
+End Function
+
+Function LoadFromFileTop(filename, ByRef data, top)
+' Load top n lines of data from filename
+   Dim f
+   Set f = fso.OpenTextFile(filename)
+   Dim i
+   i = 0
+   Do While Not f.AtEndOfStream And i < top
+      i = i + 1
+      data = data & f.ReadLine & vbNewLine
+   Loop
+   f.close
+   Set f = nothing
+End Function
+
+Function DeleteFile(filename)
+' Load data from filename
+   Dim f
+   On Error Resume Next
+   Set f = fso.GetFile(filename)
+   If Err=0 then
+      f.Delete()
+      Set f = Nothing
+      DeleteFile = true
+   Else
+      DeleteFile = false
+   End If
+   On Error Goto 0
+   Set f = nothing
+End Function
+</script>
+</head>
+
+<body onload="UpdateCommand()" aonclick="UpdateCommand()" onkeyup="UpdateCommand()" scroll="auto">
+<form name="main">
+<table border="0" cellpadding="0" cellspacing="0" class="border" width="500" id="tab_overview">
+  <tr>
+    <td width="100%" height="14" nowrap class="bg smear" onclick='Call ToggleContents("overview", 2)'>&nbsp;Overview of WGET GUI</td>
+    <td height="14" width="10" nowrap><span title="Help" onclick='Call ToggleContents("overview", 1)' class="lll">?</span></td>
+  </tr>
+  <tr style="display:none;">
+    <td colspan="2" width="100%"><div class="help"><b>Help: </b>Open/close the windows below by clicking on the title bar. Help is available by clicking on the "?" icons.</div></td>
+  </tr>
+  <tr style="display:none;">
+    <td class="small" colspan="2" width="100%">
+    <p><b>WGET</b> is a command line utility for downloading web pages. You specify a URL and some options like how deep to follow links and which file types to return and WGET goes and downloads the page(s), links and images to your computer.</p>
+    <p><b>WGETGUI</b> allows you to easily run WGET without having to memorize all those difficult commands.</p>
+    <p>You will need to have the wget.exe in the same folder as this HTML application for the code to work.</p>
+    </td>
+  </tr>
+</table><br>
+
+<table border="0" cellpadding="0" cellspacing="0" class="border" width="500" id="tab_input">
+  <tr>
+    <td width="100%" height="14" nowrap class="bg smear" onclick='Call ToggleContents("input", 2)'>&nbsp;WGET Options</td>
+    <td height="14" width="10" nowrap><span title="Help" onclick='Call ToggleContents("input", 1)' class="lll">?</span></td>
+  </tr>
+  <tr style="display:none;">
+    <td colspan="2" width="100%"><div class="help"><b>Help: </b>This box allows you to define which web page to fetch and how deep to follow the links.</div></td>
+  </tr>
+  <tr>
+    <td colspan="2" width="100%">
+      <table class="small" border="0" width="100%">
+       <tr>
+       <td nowrap><b>URL:</b></td>
+       <td width="100%"><input class="small border" style="width:90%" name="url" value="http://localhost/test.asp"><span class="lll silver" language="javascript" onclick="alert('Which URL (web page) should WGET download.\nExample:\nhttp://www.yahoo.com/')">?</span></td>
+       </tr>
+       <tr>
+       <td nowrap><b>Follow links: </b></td>
+       <td width="100%">
+       <select name="followlinks" class="small">
+        <option value="">None
+        <option value=" -r -l0">All!!!
+        <option value=" -r -l1">1 link deep
+        <option value=" -r -l2">2 links deep
+        <option value=" -r -l3">3 links deep
+        <option value=" -r -l4">4 links deep
+        <option value=" -r -l5">5 links deep
+        <option value=" -r -l6">6 links deep
+        <option value=" -r -l7">7 links deep
+        <option value=" -r -l8">8 links deep
+        <option value=" -r -l9">9 links deep
+       </select>
+       <!--<input class="small" type="checkbox" value="-r" checked name="followlinks"><span class="lll silver" language="javascript" onclick="alert('Set whether WGET should follow links.\nThis allows you to fetch a page and all it\'s related pages.')">?</span>
+       <b>to level</b> <input class="small border" size=2 name="depth" value="1"><span class="lll silver" language="javascript" onclick="alert('Set how deep WGET should follow links.\n0 = Follow links indefinitely - careful!.\n1 = Only fetch pages linked directly from the main URL.')">?</span>
+       --></td>
+       </tr>
+       <tr>
+       <td nowrap><b>Stay in folder: </b></td>
+       <td width="100%"><input class="small" type="checkbox" value="-np" checked name="noparent"><span class="lll silver" language="javascript" onclick="alert('Tell WGET only to go deeper than the main URL and not travel to any parent directories. Useful for downloading HTML tutorials or docs all in one folder with index page.')">?</span></td>
+       </tr>
+       <tr>
+       <td colspan=2 style="border-top:1px solid red"><b>Command: </b>
+       <input Name="command" class="small border" style="width:350;">
+       <input type="button" onclick="RunCommand()" class="small border" value="GO!">
+       </td>
+       </tr>
+      </table>
+    </td>
+  </tr>
+</table><br>
+
+<table border="0" cellpadding="0" cellspacing="0" class="border" width="500" id="tab_logon">
+  <tr>
+    <td width="100%" height="14" class="bg smear" onclick='Call ToggleContents("logon", 2)'>&nbsp;Logon Details</td>
+    <td height="14" width="10" nowrap><span title="Help" onclick='Call ToggleContents("logon", 1)' class="lll">?</span></td>
+  </tr>
+  <tr style="display:none;">
+    <td colspan="2" width="100%"><div class="help"><b>Help: </b>Some sites are password protected. WGET allows you to pre-specify logon details for Basic HTTP Authentication.<br>Some servers require the domain name as part of the username (DOMAIN\\username).</div></td>
+  </tr>
+  <tr style="display:none;">
+    <td colspan="2" width="100%">
+      <table class="small" border="0" width="100%">
+       <tr>
+       <td><b>Username: </b></td>
+       <td width="100%"><input class="small border" style="width:40%" name="username"><span class="lll silver" language="javascript" onclick="alert('Username for basic authentication.\nSome servers require the domain name as part of the username (DOMAIN\\username).')">?</span></td>
+       </tr>
+       <tr>
+       <td nowrap><b>Password: </b></td>
+       <td width="100%"><input class="small border" type="password" style="width:20%" name="password"><span class="lll silver" language="javascript" onclick="alert('Password for basic authentication.')">?</span></td>
+       </tr>
+      </table>
+    </td>
+  </tr>
+</table><br>
+
+<table border="0" cellpadding="0" cellspacing="0" class="border" width="500" id="tab_advanced">
+  <tr>
+    <td width="100%" height="14" class="bg smear" onclick='Call ToggleContents("advanced", 2)'>&nbsp;Advanced</td>
+    <td height="14" width="10" nowrap><span title="Help" onclick='Call ToggleContents("advanced", 1)' class="lll">?</span></td>
+  </tr>
+  <tr style="display:none;">
+    <td colspan="2" width="100%"><div class="help"><b>Help: </b>Advanced options for specialized needs.</div></td>
+  </tr>
+  <tr style="display:none;">
+    <td colspan="2" width="100%">
+      <table class="small" border="0" width="100%">
+       <tr>
+       <td nowrap><b>Relative links:</b></td>
+       <td width="100%" nowrap><input type="checkbox" value=" -k" name="relative"><span class="lll silver" language="javascript" onclick="alert('WGET will convert absolute links to relative links.')">?</span></td>
+       </tr>
+       <tr>
+       <td><b>Include Folders: </b></td>
+       <td width="100%"><input class="small border" style="width:90%" name="folders"><span class="lll silver" language="javascript" onclick="alert('Set which folders MAY be scanned.\nEnter a comma seperated list of folder names.\nExample:\n/docs/,/lib/')">?</span></td>
+       </tr>
+       <tr>
+       <td><b>Exclude Folders: </b></td>
+       <td width="100%"><input class="small border" style="width:90%" name="nofolders"><span class="lll silver" language="javascript" onclick="alert('Set which folders MAY NOT be scanned.\nEnter a comma seperated list of folder names.\nExample:\n/cgi-bin/,/images/')">?</span></td>
+       </tr>
+       <tr>
+       <td nowrap><b>Include File types: </b></td>
+       <td width="100%"><input class="small border" style="width:90%" name="extensions"><span class="lll silver" language="javascript" onclick="alert('Set which file types MAY be downloaded.\nEnter a comma seperated list of file extensions.\nExample:\nhtm,gif,jpg')">?</span></td>
+       </tr>
+       <tr>
+       <td nowrap><b>Exclude File types: </b></td>
+       <td width="100%"><input class="small border" style="width:90%" name="noextensions"><span class="lll silver" language="javascript" onclick="alert('Set which file types MAY NOT be downloaded.\nEnter a comma seperated list of file extensions.\nExample:\nhtm,gif,jpg')">?</span></td>
+       </tr>
+       <tr>
+       <td nowrap><b>Jump sites?</b></td>
+       <td width="100%" nowrap><input type="checkbox" value="-H" name="foreign"> <b>Only domains: </b><input class="small border" style="width:210" name="domains"><span class="lll silver" language="javascript" onclick="alert('Can WGET follow links to other sites? If so, you can limit which domains should be scanned.\nEnter a comma seperated list of domain names.\nExample:\nsun.com,cocoon.apacher.org\nedu,org')">?</span></td>
+       </tr>
+       <tr>
+       <td nowrap><b>File limit: </b></td>
+       <td width="100%"><input class="small border" size=2 name="filelimit" value=""><span class="lll silver" language="javascript" onclick="alert('Limit how many files WGET downloads.')">?</span></td>
+       </tr>
+       <tr>
+       <td nowrap><b>Retries: </b></td>
+       <td width="100%"><input class="small border" size=2 name="retries" value=""><span class="lll silver" language="javascript" onclick="alert('Set how many times WGET should try to get a file if it fails.\n0 = Unlimited\n1 = Only try once (default).')">?</span></td>
+       </tr>
+       <tr>
+       <td nowrap><b>Wait: </b></td>
+       <td width="100%"><input class="small border" size=2 name="wait" value=""><span class="lll silver" language="javascript" onclick="alert('Set how many Set how many seconds WGET should wait between requests. Use this to avoid overloading the web server.')">?</span></td>
+       </tr>
+       <tr>
+       <td nowrap><b>Overwrite files: </b></td>
+       <td width="100%"><input class="small" type="checkbox" checked name="overwrite"><span class="lll silver" language="javascript" onclick="alert('Set whether WGET should overwrite existing files already downloaded.')">?</span></td>
+       </tr>
+       <tr>
+       <td nowrap><b>User Agent: </b></td>
+       <td width="100%"><input class="small border" style="width:90%" name="useragent" value=""><span class="lll silver" language="javascript" onclick="alert('Specify which user agent string (browser name) WGET sends to the server.\nDefault is WGET/version.')">?</span></td>
+       </tr>
+      </table>
+    </td>
+  </tr>
+</table><br>
+
+<table border="0" cellpadding="0" cellspacing="0" class="border" width="500" id="tab_output">
+  <tr>
+    <td width="100%" height="14" class="bg smear" onclick='Call ToggleContents("output", 2)'>&nbsp;Output</td>
+    <td height="14" width="10" nowrap><span title="Help" onclick='Call ToggleContents("output", 1)' class="lll">?</span></td>
+  </tr>
+  <tr style="display:none;">
+    <td colspan="2" width="100%"><div class="help"><b>Help: </b>WGET returns messages as it downloads your files. These will be displayed here.</div></td>
+  </tr>
+  <tr style="display:none;">
+    <td colspan="2" width="100%">Below is the first 200 lines of output (<a target="_blank" href="op.txt">Full output</a> | <a href=".">Show folder</a>)
+    <textarea class="small border" style="width:100%; height:400px" name="op">
+    </textarea>
+    </td>
+  </tr>
+</table><br>
+
+</form>
+</body>
+
+</html>
